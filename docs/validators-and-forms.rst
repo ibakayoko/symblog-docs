@@ -281,22 +281,19 @@ use them. Replace the content of the contact action located at
 .. code-block:: php
 
     // src/Blogger/BlogBundle/Controller/PageController.php
-    public function contactAction()
+    public function contactAction(Request $request)
     {
         $enquiry = new Enquiry();
         $form = $this->createForm(new EnquiryType(), $enquiry);
 
-        $request = $this->getRequest();
-        if ($request->getMethod() == 'POST') {
-            $form->bindRequest($request);
-
-            if ($form->isValid()) {
+        $form->handleRequest($request);
+        
+        if ($form->isValid()) {
                 // Perform some action, such as sending an email
 
                 // Redirect - This is important to prevent users re-posting
                 // the form if they refresh the page
-                return $this->redirect($this->generateUrl('BloggerBlogBundle_contact'));
-            }
+                return $this->redirectToRoute('BloggerBlogBundle_contact');
         }
 
         return $this->render('BloggerBlogBundle:Page:contact.html.twig', array(
@@ -337,6 +334,8 @@ with the following. The statements should be placed under the existing ``use`` s
     // Import new namespaces
     use Blogger\BlogBundle\Entity\Enquiry;
     use Blogger\BlogBundle\Form\EnquiryType;
+    use Symfony\Component\HttpFoundation\Request;
+    use Symfony\Component\HttpFoundation\Session\Session;
 
     class PageController extends Controller
     // ..
@@ -573,9 +572,8 @@ Ensure you add the 5 new ``use`` statements at the top of the file.
     namespace Blogger\BlogBundle\Entity;
 
     use Symfony\Component\Validator\Mapping\ClassMetadata;
-    use Symfony\Component\Validator\Constraints\NotBlank;
-    use Symfony\Component\Validator\Constraints\Email;
-    use Symfony\Component\Validator\Constraints\Length;
+    use Symfony\Component\Validator\Constraints as Assert;
+    
 
     class Enquiry
     {
@@ -583,17 +581,22 @@ Ensure you add the 5 new ``use`` statements at the top of the file.
 
         public static function loadValidatorMetadata(ClassMetadata $metadata)
         {
-            $metadata->addPropertyConstraint('name', new NotBlank());
+            $metadata->addPropertyConstraint('name', new Assert\NotBlank());
 
-            $metadata->addPropertyConstraint('email', new Email());
+            $metadata->addPropertyConstraint('email', new Assert\Email());
 
-            $metadata->addPropertyConstraint('subject', new NotBlank());
-            $metadata->addPropertyConstraint('subject', new Length(array(
-                'max' => 50,
+            $metadata->addPropertyConstraint('subject', new Assert\NotBlank());
+
+            $metadata->addPropertyConstraint('subject', new Assert\Length(array(
+              'max'        => 50,
+              'maxMessage' => 'The subject cannot be longer than {{ limit }} characters',
             )));
 
-            $metadata->addPropertyConstraint('body', new Length(array(
-                'min' => 50,
+           $metadata->addPropertyConstraint('body', new Assert\Length(array(
+             'min'        => 50,
+             'max'        => 255,
+             'minMessage' => 'Your message must be at least {{ limit }} characters long',
+             'maxMessage' => 'Your message cannot be longer than {{ limit }} characters',
             )));
         }
 
@@ -627,7 +630,7 @@ To change the message output by the email validator you would do the following.
 
 .. code-block:: php
 
-    $metadata->addPropertyConstraint('email', new Email(array(
+    $metadata->addPropertyConstraint('email', new Assert\Email(array(
         'message' => 'symblog does not like invalid emails. Give me a real one!'
     )));
 
@@ -724,7 +727,12 @@ with the content below.
                 ->setBody($this->renderView('BloggerBlogBundle:Page:contactEmail.txt.twig', array('enquiry' => $enquiry)));
             $this->get('mailer')->send($message);
 
-            $this->get('session')->setFlash('blogger-notice', 'Your contact enquiry was successfully sent. Thank you!');
+             $session = new Session();
+
+            // add flash messages
+            $session->getFlashBag()->add(
+                'blogger-notice', 'Your contact enquiry was successfully sent. Thank you!'
+            );
 
             // Redirect - This is important to prevent users re-posting
             // the form if they refresh the page
@@ -768,11 +776,11 @@ Update the content of the template with the following.
         <h1>Contact symblog</h1>
     </header>
 
-    {% if app.session.hasFlash('blogger-notice') %}
+    {% for message in app.session.getFlashBag.get('blogger-notice') %}
         <div class="blogger-notice">
-            {{ app.session.flash('blogger-notice') }}
+            {{ message }}
         </div>
-    {% endif %}
+    {% endfor %}
 
     <p>Want to contact symblog?</p>
 
